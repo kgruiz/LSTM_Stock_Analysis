@@ -437,8 +437,7 @@ class model:
 
     for ticker in tqdm(techList):
 
-        df = yf.download(ticker, start="2012-01-01", end=datetime.now() - timedelta(days=.8), progress=False)
-        print(f"datetime.now() - timedelta(days=1): {datetime.now() - timedelta(days=.8)}")
+        df = yf.download(ticker, start="2012-01-01", end=datetime.now(), progress=False)
 
         fig = plt.figure(figsize=(16, 6))
         fig.suptitle(f"Close Price History ({ticker})")
