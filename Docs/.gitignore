@@ -33,7 +33,6 @@ node_modules/
 /pipenv/
 
 # Ignore logs and temporary files
-*.log
 *.swp
 *.swo
 *.tmp
@@ -83,21 +82,14 @@ ehthumbs.db
 *.srt
 *.sub
 *.rar
-*.gz
 *.xz
 *.z
 *.bzip
 *.bz2
 *.bzip2
 *.7z
-*.tgz
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.zip
 *.war
 *.ear
-*.jar
 
 # Ignore backup files created by text editors or version control systems
 *~
@@ -123,4 +115,3 @@ ehthumbs.db
 
 # Ignore .gitignore itself and README.md files
 .gitignore
-README.md
