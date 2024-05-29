@@ -6,17 +6,33 @@ import inspect
 import warnings
 import functools
 import numpy as np
+import pandas as pd
 import networkx as nx
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 import graphviz
-from networkx.drawing.nx_agraph import to_agraph
+from itertools import combinations
+import time
+import igraph as ig
+import graphistry
+from igraph import *
+import igraph as ig
+import pydot
+import csv
+from tabulate import tabulate as tb
+
+
+do = 0
 
 
 class model:
 
-    do = 0
+    def __init__(self):
+        self.model = None
+        self.modelInit()
+        self.modelOps()
 
-    if do:
+    def modelInit(self):
 
         import tensorflow as tf
         from tensorflow.python.platform import gfile
@@ -37,20 +53,6 @@ class model:
 
         import tensorflow as tf
 
-        # # Define a custom callback to capture stack traces
-        # class StackTraceCallback(tf.keras.callbacks.Callback):
-        #     import tensorflow as tf
-
-        #     def __init__(self):
-        #         import tensorflow as tf
-        #         super(StackTraceCallback, self).__init__()
-
-        #     def on_train_begin(self, logs=None):
-        #         tf.profiler.experimental.start("logs")
-
-        #     def on_train_end(self, logs=None):
-        #         tf.profiler.experimental.stop()
-
         tf.config.run_functions_eagerly(True)
         tf.data.experimental.enable_debug_mode()
 
@@ -67,41 +69,43 @@ class model:
         reqShape = (1, 60, 1)
 
         # Create the NumPy array with zeros
-        xArray = np.zeros(reqShape)
+        self.xArray = np.zeros(reqShape)
 
         # Fill the array with numbers ranging from 70 to 130
-        xArray[:] = np.arange(70, 130).reshape(reqShape)
+        self.xArray[:] = np.arange(70, 130).reshape(reqShape)
 
         yReqShape = (1, -1)
-        y = [12]
-        y = np.array(y)
-        y = np.reshape(y, yReqShape)
+        self.y = [12]
+        self.y = np.array(self.y)
+        self.y = np.reshape(self.y, yReqShape)
 
         print(f"\nNow Training\n")
 
-        model = Sequential()
-        model.add(Input(shape=(xArray.shape[1], 1)))
-        model.add(LSTM(128, return_sequences=True, activation="relu"))
-        model.add(Dropout(0.2))  # Dropout layer to prevent overfitting
-        model.add(LSTM(64, return_sequences=False, activation="relu"))
-        # model.add(Dropout(0.2))
-        model.add(Dense(25, activation="relu"))
-        model.add(Dense(1))
+        self.model = Sequential()
+        self.model.add(Input(shape=(self.xArray.shape[1], 1)))
+        self.model.add(LSTM(128, return_sequences=True, activation="relu"))
+        self.model.add(Dropout(0.2))  # Dropout layer to prevent overfitting
+        self.model.add(LSTM(64, return_sequences=False, activation="relu"))
+        self.model.add(Dropout(0.2))
+        self.model.add(Dense(25, activation="relu"))
+        self.model.add(Dense(1))
 
-        model.compile(optimizer="adam", loss="mean_squared_error")
+        self.model.compile(optimizer="adam", loss="mean_squared_error")
 
-        model.fit(
-            xArray,
-            y,
+    def modelOps(self):
+
+        self.model.fit(
+            self.xArray,
+            self.y,
             batch_size=1,
             epochs=1,
             verbose=1,
             # callbacks=[StackTraceCallback()],
         )  # Adjust epochs and batch size as needed
 
-        model.save("./testModel.keras")
+        self.model.save("./testModel.keras")
 
-        # model = keras.models.load_model("./testModel.keras")
+        # self.model = keras.models.load_model("./testModel.keras")
 
         # def convert_keras_model_to_dot(keras_model_path, output_dot):
         #     load_model = keras.models.load_model
@@ -149,13 +153,22 @@ class model:
 
 class func:
 
-    def __init__(self, name, filePath, className, line):
+    def __init__(self, name, filePath, className, line, time):
 
         self.name = name
         self.filePath = filePath
-        self.line = line
+        self.line = int(line)
         self.className = className
         self.displayName = self.getDisplayName()
+        self.time = time
+        self.info = (
+            self.name,
+            self.filePath,
+            self.line,
+            self.className,
+            self.displayName,
+            self.time,
+        )
 
     def getDisplayName(self):
 
@@ -167,19 +180,19 @@ class func:
         # Get the last non-empty element
         prevFile = [part for part in parts if part][-1]
 
-        if self.name == "<module>":
+        # if self.name == "<module>":
 
-            return "main"
+        #     return "main"
 
         if self.name == "error_handler":
 
-            return filePath + "/" + self.name + ":" + self.line
+            return filePath + "/" + self.name + "~" + str(self.line)
 
         if self.className != "None":
-            return "<" + self.className + "> " + self.name + ":" + self.line
+            return "<" + self.className + "> " + self.name + "~" + str(self.line)
 
         else:
-            return prevFile + "/" + self.name + ":" + self.line
+            return prevFile + "/" + self.name + "~" + str(self.line)
 
     def __eq__(self, other):
         if not isinstance(other, func):
@@ -213,223 +226,160 @@ class func:
         return self.displayName
 
 
-class CAG:
-    def __init__(self):
-        self.graph = nx.DiGraph()
-
-    def addNode(self, node):
-        self.graph.add_node(node)
-
-    def nodes(self):
-        return list(self.graph.nodes())
-
-    def delNode(self, node):
-        self.graph.remove_node(node)
-
-    def drawGraph(self):
-
-        # Convert to AGraph object
-        agraph = to_agraph(self.graph)
-
-        # Add edge labels
-        for u, v, data in self.graph.edges(data=True):
-            agraph.add_edge(u, v, label=str(data.get("weight", "")))
-
-        # Visualize the graph using Graphviz
-        agraph.draw("graph.png", prog="dot")
-
-        # Show the image with zoom
-        img = plt.imread("graph.png")
-
-        # Draw the original image
-        plt.imshow(img)
-
-        plt.axis("off")  # Hide axes
-        plt.tight_layout()
-        # plt.show()  # Display the graph
-
-
 class visualizeModel:
 
-    count = 0
+    def __init__(self):
+        self.makeGraph()
 
-    with open("./traces.pkl", "rb") as file:
-        traces = pickle.load(file)
+    def getFilesInDirectory(self, directoryPath):
+        return [
+            filename
+            for filename in os.listdir(directoryPath)
+            if os.path.isfile(os.path.join(directoryPath, filename))
+        ]
 
-    with open("./fitData.pkl", "rb") as file:
-        fitData = pickle.load(file)
+    def getData(self):
 
-    with open("./trainStepData.pkl", "rb") as file:
-        trainStepData = pickle.load(file)
+        uniqueFuncts = set()
 
-    tracesList = []
-    tracesList.append(traces)
-    fileP = "./traces"
-    for i in range(2, 11):
+        tracesDict = dict()
 
-        tempFile = fileP + str(i) + ".pkl"
+        home = "/Users/kadengruizenga/CodingProjects/LSTM_Stock_Analysis/test.py"
 
-        with open(tempFile, "rb") as file:
-            tracesTemp = pickle.load(file)
+        directoryPath = "./traces"
+        filesInDirectory = self.getFilesInDirectory(directoryPath)
 
-        tracesList.append(tracesTemp)
+        for traceFile in tqdm(filesInDirectory, desc="Loading Files"):
 
-    # with open("./tracesList", "wb") as file:
-    #     pickle.dump(tracesList, file)
+            traceFileFull = directoryPath + "/" + traceFile
 
-    uniqueFuncts = set()
+            with open(traceFileFull, "rb") as file:
 
-    tracesDict = dict()
+                tracesFromFile = pickle.load(file)
 
-    for trace in tracesList:
+                for time, stackTrace in tracesFromFile.items():
 
-        for funcTrace in trace.values():
+                    assert time not in tracesDict
 
-            tracesDict[count] = funcTrace
+                    tracesDict[time] = stackTrace
 
-            count += 1
+        for time, stackTrace in tqdm(
+            tracesDict.items(), desc="Finding Unique Functions"
+        ):
 
-    for traceD in tracesList:
+            origCaller = stackTrace[-3]
+            filePath = re.search(r"File: (.*?),", origCaller).group(1)
+            functionName = re.search(r"Function: (.*)", origCaller).group(1)
 
-        for key, value in traceD.items():
+            if (filePath == home) & (functionName == "__init__"):
 
-            for funcCall in value:
+                continue  # ignorue files from compile and importing
+
+            for funcCall in stackTrace:
 
                 filePath = re.search(r"File: (.*?),", funcCall).group(1)
                 className = re.search(r"Class: (.*?),", funcCall).group(1)
                 line = re.search(r"Line: (.*?),", funcCall).group(1)
                 functionName = re.search(r"Function: (.*)", funcCall).group(1)
 
-                function = func(functionName, filePath, className, line)
+                function = func(functionName, filePath, className, line, time)
 
                 uniqueFuncts.add(function)
 
-    modelGraph = CAG()
+        for function in tqdm(uniqueFuncts, desc="Making displayNames Unique With File"):
 
-    for function in uniqueFuncts:
+            displayName = function.displayName
 
-        displayName = function.displayName
+            # if name == "<module>":
+            #     function.displayName = "main"
+            #     continue
 
-        # if name == "<module>":
-        #     function.displayName = "main"
-        #     continue
+            nameCount = 0
 
-        nameCount = 0
+            for funct in uniqueFuncts:
 
-        for funct in uniqueFuncts:
+                if funct.displayName == displayName:
+                    nameCount += 1
 
-            if funct.displayName == displayName:
-                nameCount += 1
+            if nameCount > 1:
 
-        if nameCount > 1:
+                filePath = function.filePath
 
-            filePath = function.filePath
+                # Split the string by '/'
+                parts = filePath.split("/")
 
-            # Split the string by '/'
-            parts = filePath.split("/")
+                # Get the last non-empty element
+                prevFile = [part for part in parts if part][-1]
 
-            # Get the last non-empty element
-            prevFile = [part for part in parts if part][-1]
+                function.displayName = prevFile + "/" + function.displayName
 
-            function.displayName = prevFile + "/" + function.displayName
+        for function in tqdm(uniqueFuncts, desc="Making displayNames Unique With Line"):
 
-    for function in uniqueFuncts:
+            displayName = function.displayName
 
-        displayName = function.displayName
+            nameCount = 0
 
-        nameCount = 0
-
-        for funct in uniqueFuncts:
-            if ":" in funct.displayName:
-                mainDisName = re.search(r"(.*?):", funct.displayName).group(1)
-            else:
-                mainDisName = funct.displayName
-
-            if mainDisName == displayName:
-                nameCount += 1
-
-        if nameCount > 1 & (":" not in displayName):
-
-            line = function.line
-
-            function.displayName = function.displayName + ":" + str(line)
-
-    for function in uniqueFuncts:
-
-        modelGraph.addNode(function)
-
-    nodes = modelGraph.nodes()
-
-    for node in nodes:
-
-        print(f"Node display name: {node.displayName}, ID: {id(node)}")
-
-    print(len(uniqueFuncts))
-
-    a = 0
-
-    for key, value in tracesDict.items():
-
-        stack = []
-
-        for funcCall in value:
-
-            filePath = re.search(r"File: (.*?),", funcCall).group(1)
-            className = re.search(r"Class: (.*?),", funcCall).group(1)
-            line = re.search(r"Line: (.*?),", funcCall).group(1)
-            functionName = re.search(r"Function: (.*)", funcCall).group(1)
-
-            function = func(functionName, filePath, className, line)
-
-            assert function in uniqueFuncts
-
-            stack.append(function)
-
-        nodes = modelGraph.nodes()
-
-        for i, frame in enumerate(stack):
-
-            curNodeIDx = nodes.index(frame)
-
-            curNode = nodes[curNodeIDx]
-
-            if ((curNode.name == "error_handler") | (curNode.name == "wrapper")) & (
-                frame != stack[0]
-            ):
-                curNodeIDx = nodes.index(stack[i - 1])
-                curNode = nodes[curNodeIDx]
-
-            if frame != stack[-1]:
-
-                nextNode = stack[i + 1]
-                d = id(nextNode)
-                te = 4
-                print(a)
-                parentNodeIDx = nodes.index(nextNode)
-                parentNode = nodes[parentNodeIDx]
-
-                if ((curNode.name == "error_handler") | (curNode.name == "wrapper")) & (
-                    frame != stack[-2]
-                ):
-                    parentNodeIDx = nodes.index(stack[i + 2])
-                    parentNode = nodes[parentNodeIDx]
-
-                if modelGraph.graph.has_edge(parentNode, curNode):
-                    modelGraph.graph.get_edge_data(parentNode, curNode)["weight"] += 1
-                    a += 1
-
+            for funct in uniqueFuncts:
+                if "~" in funct.displayName:
+                    mainDisName = re.search(r"(.*?)~", funct.displayName).group(1)
                 else:
-                    modelGraph.graph.add_edge(parentNode, curNode, weight=1)
-                    a += 1
+                    mainDisName = funct.displayName
 
-        assert (len(set(value)) <= len(set(nodes))) & (
-            len(set(value)) <= len(uniqueFuncts)
-        )
+                if mainDisName == displayName:
+                    nameCount += 1
 
-    for node in nodes:
+            if nameCount > 1 & ("~" not in displayName):
 
-        if (node.name == "error_handler") | (node.name == "wrapper"):
+                line = function.line
 
-            modelGraph.delNode(node)
+                function.displayName = function.displayName + "~" + str(line)
 
-    modelGraph.drawGraph()
+        return uniqueFuncts, tracesDict
+
+    def makeGraph(self):
+
+        uniqueFuncts, tracesDict = self.getData()
+
+        nodes = list(uniqueFuncts)
+
+        edges = []
+
+        for time, stackTrace in tqdm(tracesDict.items(), desc="Adding Edges"):
+
+            for i, funcCall in enumerate(stackTrace):
+
+                if funcCall != stackTrace[-1]:
+
+                    filePath = re.search(r"File: (.*?),", funcCall).group(1)
+                    className = re.search(r"Class: (.*?),", funcCall).group(1)
+                    line = re.search(r"Line: (.*?),", funcCall).group(1)
+                    functionName = re.search(r"Function: (.*)", funcCall).group(1)
+
+                    function = func(functionName, filePath, className, line, time)
+
+                    curNodeIdx = nodes.index(function)
+
+                    curNode = nodes[curNodeIdx]
+
+                    parentFuncCall = stackTrace[i + 1]
+
+                    filePath = re.search(r"File: (.*?),", parentFuncCall).group(1)
+                    className = re.search(r"Class: (.*?),", parentFuncCall).group(1)
+                    line = re.search(r"Line: (.*?),", parentFuncCall).group(1)
+                    functionName = re.search(r"Function: (.*)", parentFuncCall).group(1)
+
+                    parentFunction = func(functionName, filePath, className, line, time)
+
+                    parentNodeIdx = nodes.index(parentFunction)
+
+                    parentNode = nodes[parentNodeIdx]
+
+                    assert (curNode in nodes) & (parentNode in nodes)
+
+                    edges.append((parentNode, curNode))
+
+        with open("./edges", "wb") as file:
+            pickle.dump(edges, file)
+
+        with open("./nodes", "wb") as file:
+            pickle.dump(nodes, file)
